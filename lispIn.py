@@ -1,8 +1,9 @@
 import math
 import operator as op
+from fractions import Fraction
 
-mathematical_operators = {"+", "-", "*", "/", "rem"}
-relational_operators = {">", "<", "<=", ">=", "/=", "="}
+mathematical_operators = ["+", "-", "*", "/", "rem"]
+relational_operators = [">", "<", "<=", ">=", "/=", "="]
 
 Symbol = str
 List = list
@@ -24,7 +25,7 @@ def number_symbol(token):
 
 
 def read_as_list(lisp_list):
-    if len(lisp_list) == 0:
+    if (lisp_list == [None]) or (not lisp_list):
         raise SyntaxError("Unexpected EOF while reading")
     token = lisp_list.pop(0)
     if token == "(":
@@ -51,46 +52,60 @@ def quote(oprnds):
     return tuple(oprnds)
 
 
-def define(oprnds):
-    env[oprnds[0]] = oprnds[1]
-    # print("DEFINE : {}".format(env[oprnds[0]]))
-
-
 def math_operators(opr_oprnds):
+    oprnd_li = list(map(str_to_fraction, opr_oprnds[1:]))
+    # print("MATH OP I: {}".format(oprnd_li))
+    oprnd_li = list(map(eval_lisp_program, oprnd_li))
+    # print("MATH OP II: {}".format(oprnd_li))
+    oprnd_li = list(map(str_to_fraction, oprnd_li))
+    # print("MATH OP III: {}".format(oprnd_li))
     if opr_oprnds[0] == "+":
         sum = 0
-        for term in opr_oprnds[1:]:
-            sum = sum + eval_lisp_program(term)
+        for term in oprnd_li:
+            sum = sum + term
         return sum
     elif opr_oprnds[0] == "*":
         product = 1
-        for term in opr_oprnds[1:]:
-            product = product * eval_lisp_program(term)
-        return float(product)
+        for term in oprnd_li:
+            product = product * term
+        return int(product)
     elif opr_oprnds[0] == "rem":
-        return eval_lisp_program(opr_oprnds[1]) % eval_lisp_program(opr_oprnds[2])
+        return oprnd_li[0] % oprnd_li[1]
     elif opr_oprnds[0] == "-":
-        return eval_lisp_program(opr_oprnds[1]) - eval_lisp_program(opr_oprnds[2])
+        return oprnd_li[0] - oprnd_li[1]
     elif opr_oprnds[0] == "/":
-        return eval_lisp_program(opr_oprnds[1]) // eval_lisp_program(opr_oprnds[2])
+        if oprnd_li[0] % oprnd_li[1] == 0:
+            return oprnd_li[0] // oprnd_li[1]
+        else:
+            return str(oprnd_li[0]) + '/' + str(oprnd_li[1])
+
+
+def str_to_fraction(a):
+    if type(a) == str:
+        return Fraction(a)
+    else:
+        return a
 
 
 def rel_operators(opr_oprnds):
+    oprnd_li = list(map(str_to_fraction, opr_oprnds[1:]))
+    oprnd_li = list(map(eval_lisp_program, oprnd_li))
     if opr_oprnds[0] == "/=":
-        return eval_lisp_program(opr_oprnds[1]) != eval_lisp_program(opr_oprnds[2])
+        return oprnd_li[0] != oprnd_li[1]
     elif opr_oprnds[0] == "=":
-        return eval_lisp_program(opr_oprnds[1]) == eval_lisp_program(opr_oprnds[2])
+        return oprnd_li[0] == oprnd_li[1]
     else:
-        return eval(str(eval_lisp_program(opr_oprnds[1])) + " " +
-                    str(opr_oprnds[0]) + " " + str(eval_lisp_program(opr_oprnds[2])))
+        return eval(str(oprnd_li[0]) + " " +
+                    str(opr_oprnds[0]) + " " + str(oprnd_li[1]))
 
 
 def if_clause(oprnds):
-    print("IF {} {} {}".format(oprnds[0], oprnds[1], oprnds[2]))
-    if eval_lisp_program(oprnds[0]) == True:
-        return eval_lisp_program(oprnds[1])
+    oprnd_li = list(map(eval_lisp_program, oprnds))
+    print("IF {} {} {}".format(oprnd_li[0], oprnd_li[1], oprnd_li[2]))
+    if oprnd_li[0]:
+        return oprnd_li[1]
     else:
-        return eval_lisp_program(oprnds[2])
+        return oprnd_li[2]
 
 
 def car(oprnds):
@@ -101,13 +116,13 @@ def cdr(oprnds):
     return oprnds[0][1:]
 
 
-def cons(oprnds):
-    if oprnds[0] == ["nil"]:
+def cons(*oprnds):
+    if oprnds[0] == "nil":
         return oprnds[1]
-    elif oprnds[1] == ["nil"]:
+    elif oprnds[1] == "nil":
         return oprnds[0]
     else:
-        return oprnds[0] + oprnds[1]
+        return [oprnds[0]] + [oprnds[1]]
 
 
 def update(oprnds):
@@ -118,7 +133,7 @@ def begin(*oprnds):
     return oprnds[-1]
 
 
-def list(oprnds):
+def to_list(oprnds):
     return list(oprnds)
 
 
@@ -138,6 +153,16 @@ def is_symbol(oprnds):
     return isinstance(oprnds, Symbol)
 
 
+def set(oprnds):
+    if oprnds[1] in env.keys():
+        env[oprnds[1]] = eval_lisp_program(oprnds[2])
+        print(env[oprnds[1]])
+
+
+# def lambda(oprnds):
+#     return eval_lisp_program(oprnds[2])
+
+
 env = {"eq?": op.is_,
        "equal?": op.eq,
        "quote": quote,
@@ -153,13 +178,13 @@ env = {"eq?": op.is_,
        "round": round,
        "not": op.not_,
        "procedure?": callable,
-       "set!": update,
        "begin": begin,
-       "list": list,
+       "list": to_list,
        "list?": is_list,
        "null?": is_null,
        "number?": is_number,
-       "symbol?": is_symbol
+       "symbol?": is_symbol,
+       "nil": 'nil'
        }
 
 env.update(vars(math))
@@ -172,7 +197,7 @@ def eval_lisp_program(x):
     elif isinstance(x, Number):
         return x
     elif x[0] == "define":
-        return define(x[1:])
+        env[x[1]] = eval_lisp_program(x[2])
     elif x[0] == "if":
         return if_clause(x[1:])
     elif x[0] in mathematical_operators:
@@ -180,6 +205,8 @@ def eval_lisp_program(x):
         return math_operators(x)
     elif x[0] in relational_operators:
         return rel_operators(x)
+    elif x[0] == "set!":
+        return set(x)
     elif x[0] == "#":
         pass
     else:
@@ -187,7 +214,8 @@ def eval_lisp_program(x):
         # print(args)
         return env[x[0]](*args)
 
-program = input("Enter Lisp Input: ")
-parsed_list = parse_lisp_program(program)
-print("Parsed list: {}".format(parsed_list))
-print("Evaluated result: {}".format(eval_lisp_program(parsed_list)))
+while True:
+    program = input(">>> ")
+    parsed_list = parse_lisp_program(program)
+    print("Parsed list: {}".format(parsed_list))
+    print("Evaluated result: {}".format(eval_lisp_program(parsed_list)))
