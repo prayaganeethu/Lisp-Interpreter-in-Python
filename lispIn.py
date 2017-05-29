@@ -46,8 +46,8 @@ def parse_lisp_program(lisp_program):
     return read_as_list(tokenize_lisp_prog(lisp_program))
 
 
-def eq(oprnds, gl_env, loc_env):
-    return oprnds[0] == oprnds[1]
+# def eq(oprnds, gl_env, loc_env):
+#     return oprnds[0] == oprnds[1]
 
 
 def math_operators(opr_oprnds, gl_env, loc_env):
@@ -105,12 +105,12 @@ def if_clause(oprnds, gl_env, loc_env):
         return oprnd_li[2]
 
 
-def car(oprnds, gl_env, loc_env):
-    return oprnds[0][0]
+def car(*oprnds, gl_env, loc_env):
+    return oprnds[0]
 
 
-def cdr(oprnds, gl_env, loc_env):
-    return oprnds[0][1:]
+def cdr(*oprnds, gl_env, loc_env):
+    return oprnds[1:]
 
 
 def cons(*oprnds, gl_env, loc_env):
@@ -147,7 +147,7 @@ def is_number(oprnds, gl_env, loc_env):
 
 
 def is_symbol(oprnds, gl_env, loc_env):
-    return isinstance(oprnds, Symbol)
+    return isinstance(oprnds, str)
 
 
 def set(oprnds, gl_env, loc_env):
@@ -159,9 +159,6 @@ def set(oprnds, gl_env, loc_env):
 def lambdafn(param, body, args, gl_env):
     locl_var = dictry()
     locl_var.update(zip(param, args))
-    # print("LAMBDA")
-    # print(env)
-    # print(locl_var)
     return eval_lisp_program(body, gl_env, locl_var)
 
 
@@ -171,8 +168,11 @@ def environment(variable, global_env, local_env):
             return local_env[variable]
         else:
             return global_env[variable]
+    elif global_env:
+        if variable in global_env.keys():
+            return global_env[variable]
     else:
-        return global_env[variable]
+        return variable
 
 env = dictry()
 
@@ -204,12 +204,14 @@ env.update(vars(math))
 
 def eval_lisp_program(x, gl_env, loc_env=None):
     # print("EVAL {} \n {} \n {}".format(x, gl_env, loc_env))
-    if isinstance(x, Symbol):
+    if isinstance(x, str):
         reslt = environment(x, gl_env, loc_env)
         # print("SYMBOL {}".format(reslt))
         return reslt
     elif isinstance(x, Number):
         return x
+    elif x[0] == "quote":
+        return x[1:]
     elif x[0] == "define":
         env[x[1]] = eval_lisp_program(x[2], gl_env, loc_env)
     elif x[0] == "if":
@@ -222,20 +224,35 @@ def eval_lisp_program(x, gl_env, loc_env=None):
     elif x[0] in relational_operators:
         return rel_operators(x, gl_env, loc_env)
     elif x[0] == "set!":
-        return set(x, gl_env, loc_env)
+        set(x, gl_env, loc_env)
     elif isinstance(x[0], list) and x[0][0] == "lambda":
         return lambdafn(x[0][1], x[0][2], x[1:], gl_env)
-    else:
+    elif x[0] in ["car", "cdr", "cons", "begin", "update", "list", "list?", "symbol?", "null?", "number?"]:
         args = [eval_lisp_program(arg, gl_env, loc_env) for arg in x[1:]]
         return env[x[0]](*args, gl_env, loc_env)
+    else:
+        args = [eval_lisp_program(arg, gl_env, loc_env) for arg in x[1:]]
+        return env[x[0]](*args)
+
+
+def lisp_form(expr):
+    if isinstance(expr, list):
+        return '(' + ' '.join(map(lisp_form, expr)) + ')'
+    else:
+        return str(expr)
+
+# REPL(READ-EVAL-PRINT-LOOP)
+# The Common LISP environment follows the algorithm below when interacting with users:
+# loop
+#     read in an expression from the console;
+#     evaluate the expression;
+#     print the result of evaluation to the console;
+# end loop.
+
 
 while True:
     program = input(">>> ")
     parsed_list = parse_lisp_program(program)
-    if parsed_list[0] == 'quote':
-        print(program[7:len(program) - 1])
-    else:
-        print("Parsed list: {}".format(parsed_list))
-        res = eval_lisp_program(parsed_list, env)
-        if parsed_list[0] != 'define' and parsed_list[0] != 'set!' and parsed_list[0] != 'quote':
-            print("Evaluated result: {}".format(res))
+    res = eval_lisp_program(parsed_list, env)
+    if res is not None:
+        print(lisp_form(res))
