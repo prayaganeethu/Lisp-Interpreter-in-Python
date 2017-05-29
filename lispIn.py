@@ -2,14 +2,35 @@ import math
 import operator as op
 from fractions import Fraction
 
+
+class lambdac(object):
+
+    def __init__(self, param, body, env):
+        self.param = param
+        self.body = body
+        self.env = env
+
+    def __call__(self, *args):
+        return eval_lisp_program(self.body, environment(self.param, args, self.env))
+
+
+class environment(dict):
+
+    def __init__(self, param=(), args=(), outer=None):
+        self.outer = outer
+        self.update(zip(param, args))
+
+    def find(self, var):
+        return self if (var in self) else self.outer.find(var)
+
+env = environment()
+
+env.update(vars(math))
+
 mathematical_operators = ["+", "-", "*", "/", "rem"]
 relational_operators = [">", "<", "<=", ">=", "/=", "="]
 
-Symbol = str
-List = list
 Number = (int, float)
-
-dictry = dict
 
 
 def tokenize_lisp_prog(lisp_program):
@@ -46,16 +67,9 @@ def parse_lisp_program(lisp_program):
     return read_as_list(tokenize_lisp_prog(lisp_program))
 
 
-# def eq(oprnds, gl_env, loc_env):
-#     return oprnds[0] == oprnds[1]
-
-
-def math_operators(opr_oprnds, gl_env, loc_env):
-    # print("MATH")
-    # print("{} \n {} \n {}".format(opr_oprnds, gl_env, loc_env))
-    oprnd_li = [eval_lisp_program(p, gl_env, loc_env) for p in opr_oprnds[1:]]
+def math_operators(opr_oprnds, env):
+    oprnd_li = [eval_lisp_program(p, env) for p in opr_oprnds[1:]]
     oprnd_li = list(map(str_to_fraction, oprnd_li))
-    # print("OPRNDS {}".format(oprnd_li))
     if opr_oprnds[0] == "+":
         sum = 0
         for term in oprnd_li:
@@ -84,8 +98,8 @@ def str_to_fraction(a):
         return a
 
 
-def rel_operators(opr_oprnds, gl_env, loc_env):
-    oprnd_li = [eval_lisp_program(p, gl_env, loc_env) for p in opr_oprnds[1:]]
+def rel_operators(opr_oprnds, env):
+    oprnd_li = [eval_lisp_program(p, env) for p in opr_oprnds[1:]]
     oprnd_li = list(map(str_to_fraction, oprnd_li))
     if opr_oprnds[0] == "/=":
         return oprnd_li[0] != oprnd_li[1]
@@ -96,24 +110,23 @@ def rel_operators(opr_oprnds, gl_env, loc_env):
                     str(opr_oprnds[0]) + " " + str(oprnd_li[1]))
 
 
-def if_clause(oprnds, gl_env, loc_env):
-    oprnd_li = [eval_lisp_program(p, gl_env, loc_env) for p in oprnds]
-    # print("IF {} {} {}".format(oprnd_li[0], oprnd_li[1], oprnd_li[2]))
+def if_clause(oprnds, env):
+    oprnd_li = [eval_lisp_program(p, env) for p in oprnds]
     if oprnd_li[0]:
         return oprnd_li[1]
     else:
         return oprnd_li[2]
 
 
-def car(*oprnds, gl_env, loc_env):
+def car(*oprnds, env):
     return oprnds[0]
 
 
-def cdr(*oprnds, gl_env, loc_env):
+def cdr(*oprnds, env):
     return oprnds[1:]
 
 
-def cons(*oprnds, gl_env, loc_env):
+def cons(*oprnds, env):
     if oprnds[0] == "nil":
         return oprnds[1]
     elif oprnds[1] == "nil":
@@ -122,117 +135,85 @@ def cons(*oprnds, gl_env, loc_env):
         return [oprnds[0]] + [oprnds[1]]
 
 
-def update(oprnds, gl_env, loc_env):
-    env[oprnds[0]] = oprnds[1]
-
-
-def begin(*oprnds, gl_env, loc_env):
+def begin(*oprnds, env):
     return oprnds[-1]
 
 
-def to_list(oprnds, gl_env, loc_env):
+def to_list(*oprnds, env):
     return list(oprnds)
 
 
-def is_list(oprnds, gl_env, loc_env):
+def is_list(*oprnds, env):
     return isinstance(oprnds, list)
 
 
-def is_null(oprnds, gl_env, loc_env):
+def is_null(*oprnds, env):
     return oprnds == []
 
 
-def is_number(oprnds, gl_env, loc_env):
+def is_number(*oprnds, env):
     return isinstance(oprnds, Number)
 
 
-def is_symbol(oprnds, gl_env, loc_env):
+def is_symbol(*oprnds, env):
     return isinstance(oprnds, str)
 
 
-def set(oprnds, gl_env, loc_env):
-    if oprnds[1] in env.keys():
-        env[oprnds[1]] = eval_lisp_program(oprnds[2], env)
-        # print(env[oprnds[1]])
+def set_fn(oprnds, env):
+    env.find(oprnds[1])[oprnds[1]] = eval_lisp_program(oprnds[2], env)
+
+env.update({"eq?": op.is_,
+            "equal?": op.eq,
+            "car": car,
+            "cdr": cdr,
+            "cons": cons,
+            "max": max,
+            "min": min,
+            "abs": abs,
+            "length": len,
+            "map": map,
+            "round": round,
+            "not": op.not_,
+            "procedure?": callable,
+            "begin": begin,
+            "list": to_list,
+            "list?": is_list,
+            "null?": is_null,
+            "number?": is_number,
+            "symbol?": is_symbol,
+            "nil": 'nil'
+            })
 
 
-def lambdafn(param, body, args, gl_env):
-    locl_var = dictry()
-    locl_var.update(zip(param, args))
-    return eval_lisp_program(body, gl_env, locl_var)
-
-
-def environment(variable, global_env, local_env):
-    if local_env:
-        if variable in local_env.keys():
-            return local_env[variable]
-        else:
-            return global_env[variable]
-    elif global_env:
-        if variable in global_env.keys():
-            return global_env[variable]
-    else:
-        return variable
-
-env = dictry()
-
-env = {"eq?": op.is_,
-       "equal?": op.eq,
-       "car": car,
-       "cdr": cdr,
-       "cons": cons,
-       "max": max,
-       "min": min,
-       "update": update,
-       "abs": abs,
-       "length": len,
-       "map": map,
-       "round": round,
-       "not": op.not_,
-       "procedure?": callable,
-       "begin": begin,
-       "list": to_list,
-       "list?": is_list,
-       "null?": is_null,
-       "number?": is_number,
-       "symbol?": is_symbol,
-       "nil": 'nil'
-       }
-
-env.update(vars(math))
-
-
-def eval_lisp_program(x, gl_env, loc_env=None):
-    # print("EVAL {} \n {} \n {}".format(x, gl_env, loc_env))
+def eval_lisp_program(x, env):
     if isinstance(x, str):
-        reslt = environment(x, gl_env, loc_env)
-        # print("SYMBOL {}".format(reslt))
+        reslt = env.find(x)[x]
         return reslt
     elif isinstance(x, Number):
         return x
     elif x[0] == "quote":
         return x[1:]
     elif x[0] == "define":
-        env[x[1]] = eval_lisp_program(x[2], gl_env, loc_env)
+        env[x[1]] = eval_lisp_program(x[2], env)
     elif x[0] == "if":
-        return if_clause(x[1:], gl_env, loc_env)
+        return if_clause(x[1:], env)
     elif x[0] in mathematical_operators:
-        reslt = math_operators(x, gl_env, loc_env)
-        # print("EVAL MATH")
-        # print("{} \n {} \n {}".format(x, gl_env, loc_env))
+        reslt = math_operators(x, env)
         return reslt
     elif x[0] in relational_operators:
-        return rel_operators(x, gl_env, loc_env)
+        return rel_operators(x, env)
     elif x[0] == "set!":
-        set(x, gl_env, loc_env)
-    elif isinstance(x[0], list) and x[0][0] == "lambda":
-        return lambdafn(x[0][1], x[0][2], x[1:], gl_env)
+        set_fn(x, env=env)
+    elif x[0] == "lambda":
+        return lambdac(x[1], x[2], env)
     elif x[0] in ["car", "cdr", "cons", "begin", "update", "list", "list?", "symbol?", "null?", "number?"]:
-        args = [eval_lisp_program(arg, gl_env, loc_env) for arg in x[1:]]
-        return env[x[0]](*args, gl_env, loc_env)
+        func = eval_lisp_program(x[0], env)
+        args = [eval_lisp_program(arg, env) for arg in x[1:]]
+        return func(*args, env=env)
     else:
-        args = [eval_lisp_program(arg, gl_env, loc_env) for arg in x[1:]]
-        return env[x[0]](*args)
+        func = eval_lisp_program(x[0], env)
+        args = [eval_lisp_program(arg, env) for arg in x[1:]]
+        return func(*args)
 
 
 def lisp_form(expr):
